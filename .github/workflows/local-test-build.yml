@@ -23,6 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          ref: e6655d92014988a2e1746ca50c6bfbf1f3286393
           persist-credentials: false
       - uses: ./.github/actions/setup-swift
       - uses: ./.github/actions/setup-lix
@@ -31,14 +32,33 @@ jobs:
       - name: Put tools on PATH
         run: echo "$PWD/.cache/flake-tools/bin" >> "$GITHUB_PATH"
       - name: Build and package OmniWM Dev
-        env:
-          OMNIWM_APP_NAME: OmniWM Dev
-          OMNIWM_BUNDLE_ID: com.barut.OmniWM.dev
-          OMNIWM_SIGNING_IDENTITY: OmniWM Dev
         run: |
-          Scripts/package-app.sh debug dev
+          set -euo pipefail
+          export LIBRARY_PATH="$(Scripts/ghostty-preflight.sh print-library-dir)"
+          swift build -c debug --arch arm64
+          build_dir="$(swift build -c debug --arch arm64 --show-bin-path)"
+          app="dist/OmniWM Dev.app"
+          mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources/Licenses" "$app/Contents/Frameworks"
+          cp "$build_dir/OmniWM" "$build_dir/omniwmctl" "$app/Contents/MacOS/"
+          cp Info.plist "$app/Contents/Info.plist"
+          plutil -replace CFBundleIdentifier -string com.barut.OmniWM.dev "$app/Contents/Info.plist"
+          plutil -replace CFBundleName -string "OmniWM Dev" "$app/Contents/Info.plist"
+          plutil -replace CFBundleDisplayName -string "OmniWM Dev" "$app/Contents/Info.plist"
+          plutil -replace OMNIWMGitHash -string "$(git rev-parse --short HEAD)" "$app/Contents/Info.plist"
+          cp Resources/AppIcon.icns "$app/Contents/Resources/"
+          cp Sources/OmniWMLuau/LICENSE.txt "$app/Contents/Resources/Licenses/Luau-LICENSE.txt"
+          cp Sources/OmniWMLuau/lua_LICENSE.txt "$app/Contents/Resources/Licenses/Lua-LICENSE.txt"
+          cp Resources/Licenses/*.txt "$app/Contents/Resources/Licenses/"
+          cp -R "$build_dir/OmniWM_OmniWM.bundle" "$app/Contents/Resources/"
+          cp "$build_dir/libOmniWMNowPlaying.dylib" "$app/Contents/Frameworks/"
+          python3 Scripts/localization.py package --bundle "$build_dir/OmniWM_OmniWM.bundle" --app "$app"
+          codesign --force --sign - "$app/Contents/Frameworks/libOmniWMNowPlaying.dylib"
+          codesign --force --sign - "$app/Contents/MacOS/omniwmctl"
+          codesign --force --entitlements OmniWM.entitlements --sign - "$app/Contents/MacOS/OmniWM"
+          codesign --force --entitlements OmniWM.entitlements --sign - "$app"
+          codesign --verify --deep --strict "$app"
           git rev-parse HEAD > dist/source-commit.txt
-          git rev-parse HEAD^ > dist/app-source-commit.txt
+          git rev-parse HEAD > dist/app-source-commit.txt
           ditto -c -k --sequesterRsrc --keepParent "dist/OmniWM Dev.app" dist/OmniWM-Dev.zip
           cd dist
           shasum -a 256 OmniWM-Dev.zip > OmniWM-Dev.zip.sha256
