@@ -1,0 +1,54 @@
+name: Build local test app
+
+on:
+  push:
+    branches: [build/local-test-app]
+
+permissions:
+  contents: read
+
+cache-mode: read
+
+concurrency:
+  group: local-test-app-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
+
+jobs:
+  package:
+    runs-on: xcode-27
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-swift
+      - uses: ./.github/actions/setup-lix
+        with:
+          make-target: setup
+      - name: Put tools on PATH
+        run: echo "$PWD/.cache/flake-tools/bin" >> "$GITHUB_PATH"
+      - name: Build and package OmniWM Dev
+        env:
+          OMNIWM_APP_NAME: OmniWM Dev
+          OMNIWM_BUNDLE_ID: com.barut.OmniWM.dev
+          OMNIWM_SIGNING_IDENTITY: OmniWM Dev
+        run: |
+          Scripts/package-app.sh debug dev
+          git rev-parse HEAD > dist/source-commit.txt
+          git rev-parse HEAD^ > dist/app-source-commit.txt
+          ditto -c -k --sequesterRsrc --keepParent "dist/OmniWM Dev.app" dist/OmniWM-Dev.zip
+          cd dist
+          shasum -a 256 OmniWM-Dev.zip > OmniWM-Dev.zip.sha256
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: OmniWM-Dev
+          path: |
+            dist/OmniWM-Dev.zip
+            dist/OmniWM-Dev.zip.sha256
+            dist/source-commit.txt
+            dist/app-source-commit.txt
+          if-no-files-found: error
+          retention-days: 7
