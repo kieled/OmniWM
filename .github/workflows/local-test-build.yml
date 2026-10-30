@@ -23,7 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: e6655d92014988a2e1746ca50c6bfbf1f3286393
+          ref: afec91bda55c741d3e0e3c78504d8362621cba77
           persist-credentials: false
       - uses: ./.github/actions/setup-swift
       - uses: ./.github/actions/setup-lix
@@ -31,6 +31,10 @@ jobs:
           make-target: setup
       - name: Put tools on PATH
         run: echo "$PWD/.cache/flake-tools/bin" >> "$GITHUB_PATH"
+      - name: Verify hover focus regression tests
+        run: |
+          export LIBRARY_PATH="$(Scripts/ghostty-preflight.sh print-library-dir)"
+          swift test --filter FullyVisibleHoverFocusTests
       - name: Build and package OmniWM Dev
         run: |
           set -euo pipefail
@@ -72,3 +76,7 @@ jobs:
             dist/app-source-commit.txt
           if-no-files-found: error
           retention-days: 7
+      - name: Run the full serial suite
+        run: |
+          export LIBRARY_PATH="$(Scripts/ghostty-preflight.sh print-library-dir)"
+          swift test
