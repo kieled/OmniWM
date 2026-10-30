@@ -23,7 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: afec91bda55c741d3e0e3c78504d8362621cba77
+          ref: 4d8da15ba55851d86d0c183c9f2cbfdca0dbc818
           persist-credentials: false
       - uses: ./.github/actions/setup-swift
       - uses: ./.github/actions/setup-lix
@@ -34,7 +34,7 @@ jobs:
       - name: Verify hover focus regression tests
         run: |
           export LIBRARY_PATH="$(Scripts/ghostty-preflight.sh print-library-dir)"
-          swift test --filter FullyVisibleHoverFocusTests
+          swift test --filter 'FullyVisibleHoverFocusTests|RuntimeArchitectureTests/testFocusFollowsMouseRetriesSameUnconfirmedHoveredWindowAfterDebounce'
       - name: Build and package OmniWM Dev
         run: |
           set -euo pipefail
