@@ -1,0 +1,76 @@
+name: Validate applied hover placement
+
+on:
+  push:
+    branches: [verify/hover-placement]
+
+permissions:
+  contents: read
+
+cache-mode: read
+
+concurrency:
+  group: hover-placement-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
+
+jobs:
+  tests:
+    runs-on: xcode-27
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 6630fbec5ede49078b79865826942d28c1190b2f
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: ./.github/actions/setup-swift
+      - uses: ./.github/actions/setup-lix
+        with:
+          make-target: setup
+      - name: Confirm regression fails with the previous implementation
+        run: |
+          set -euo pipefail
+          export LIBRARY_PATH="$(Scripts/ghostty-preflight.sh print-library-dir)"
+          source_file=Sources/OmniWM/Core/Controller/MouseEventHandler+FocusFollowsMouse.swift
+          trap 'git restore -- "$source_file"' EXIT
+          git show "HEAD^:$source_file" > "$source_file"
+          regression_log="$RUNNER_TEMP/hover-before-fix.log"
+          if swift test --filter FullyVisibleHoverFocusTests/testAppliedPlacementWinsWhileNewLayoutIsAwaitingFrameWrite > "$regression_log" 2>&1; then
+            echo "Regression unexpectedly passed before the fix"
+            exit 1
+          fi
+          python3 - "$regression_log" <<'PY'
+          import pathlib, re, sys
+          text = pathlib.Path(sys.argv[1]).read_text(errors="replace")
+          assert "XCTAssert" in text, "Expected assertion failures, not a build failure"
+          assert re.search(r"testAppliedPlacementWinsWhileNewLayoutIsAwaitingFrameWrite.*failed", text)
+          for line in text.splitlines():
+              if re.search(r"Test Case.*failed|Executed .*tests|Test Suite.*failed", line):
+                  print(line)
+          PY
+      - name: Verify focused hover tests after the fix
+        run: |
+          export LIBRARY_PATH="$(Scripts/ghostty-preflight.sh print-library-dir)"
+          swift test --filter FullyVisibleHoverFocusTests
+      - name: Run the full serial suite
+        run: |
+          export LIBRARY_PATH="$(Scripts/ghostty-preflight.sh print-library-dir)"
+          swift test
+  verify:
+    runs-on: xcode-27
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 6630fbec5ede49078b79865826942d28c1190b2f
+          persist-credentials: false
+      - uses: ./.github/actions/setup-swift
+      - uses: ./.github/actions/setup-lix
+        with:
+          make-target: setup
+      - name: Put tools on PATH
+        run: echo "$PWD/.cache/flake-tools/bin" >> "$GITHUB_PATH"
+      - run: make verify
